@@ -58,6 +58,7 @@ build(){
 
   sed -e "/^MANDIR\s*=/s|/usr/man/man6|$pkgdir/usr/share/man/man6|" -i doc/Makefile
 
+  # The order of applying the patches matters.
   patch -t -p1 <../nh343-menucolor.diff
   patch -t -p1 <../nh343-statuscolors.patch
   patch -t -p1 <../nh343-acid-C343-179.diff
