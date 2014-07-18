@@ -23,7 +23,8 @@ source=("http://downloads.sourceforge.net/$pkgname/$pkgname-${pkgver//.}-src.tgz
         'nh343-glyphcolor.diff'
         'nh343-beartraps.diff'
         'nh343-polysilver_v4.diff'
-        'nh343-paranoid.diff')
+        'nh343-paranoid.diff'
+        'nh343-whack.diff')
 md5sums=('21479c95990eefe7650df582426457f9'
          'ade00f9cb51f1b0140557d329d56844c'
          'b11eeacbf6e58496563723dcf1047ac1'
@@ -32,7 +33,8 @@ md5sums=('21479c95990eefe7650df582426457f9'
          'eb0be431054498c894a8fd7227f4f142'
          'a9b219d0c763c5cf92c9269f340e3493'
          'bc0b1cbbc9b14870d1c3216ad6462ada'
-         'b673d957ed1a27be301ce240e5d9e3a3')
+         'b673d957ed1a27be301ce240e5d9e3a3'
+         '5db0301bdc4b76911ba62471c5ce2692')
 
 build(){
   cd $srcdir/$pkgname-$pkgver/
@@ -70,6 +72,7 @@ build(){
   patch -t -p1 <../nh343-glyphcolor.diff
   patch -t -p1 <../nh343-beartraps.diff
   patch -t -p1 <../nh343-polysilver_v4.diff
+  patch -t -p1 <../nh343-whack.diff
 
   patch -t -p1 <../nh343-paranoid.diff
   sed -e "364 i #define PARANOID /* Enable paranoid quit */" -i include/config.h

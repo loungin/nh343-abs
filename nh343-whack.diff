@@ -1,0 +1,287 @@
+diff -Nurb nethack-3.4.3-original/include/extern.h nethack-3.4.3/include/extern.h
+--- nethack-3.4.3-original/include/extern.h	Mon Dec  8 09:39:13 2003
++++ nethack-3.4.3/include/extern.h	Wed Feb  1 22:22:00 2006
+@@ -960,6 +960,8 @@
+ 
+ /* ### mhitu.c ### */
+ 
++E const char *FDECL(weaphitmsg, (struct obj *,BOOLEAN_P));
++E const char *FDECL(barehitmsg, (struct monst *));
+ E const char *FDECL(mpoisons_subj, (struct monst *,struct attack *));
+ E void NDECL(u_slow_down);
+ E struct monst *NDECL(cloneu);
+diff -Nurb nethack-3.4.3-original/include/mondata.h nethack-3.4.3/include/mondata.h
+--- nethack-3.4.3-original/include/mondata.h	Mon Dec  8 09:39:13 2003
++++ nethack-3.4.3/include/mondata.h	Wed Feb  1 22:22:45 2006
+@@ -87,6 +87,9 @@
+ 				 (ptr) == &mons[PM_GIANT_BAT] || \
+ 				 (ptr) == &mons[PM_VAMPIRE_BAT])
+ #define is_bird(ptr)		((ptr)->mlet == S_BAT && !is_bat(ptr))
++#define has_beak(ptr)          (is_bird(ptr) || \
++                               (ptr) == &mons[PM_TENGU] || \
++                               (ptr) == &mons[PM_VROCK])
+ #define is_giant(ptr)		(((ptr)->mflags2 & M2_GIANT) != 0L)
+ #define is_golem(ptr)		((ptr)->mlet == S_GOLEM)
+ #define is_domestic(ptr)	(((ptr)->mflags2 & M2_DOMESTIC) != 0L)
+diff -Nurb nethack-3.4.3-original/include/objclass.h nethack-3.4.3/include/objclass.h
+--- nethack-3.4.3-original/include/objclass.h	Mon Dec  8 09:39:13 2003
++++ nethack-3.4.3/include/objclass.h	Wed Feb  1 22:22:45 2006
+@@ -29,14 +29,14 @@
+ #define oc_bulky	oc_big	/* for armor */
+ 	Bitfield(oc_tough,1);	/* hard gems/rings */
+ 
+-	Bitfield(oc_dir,2);
++       Bitfield(oc_dir,3);
+ #define NODIR		1	/* for wands/spells: non-directional */
+ #define IMMEDIATE	2	/*		     directional */
+ #define RAY		3	/*		     zap beams */
+ 
+-#define PIERCE		1	/* for weapons & tools used as weapons */
+-#define SLASH		2	/* (latter includes iron ball & chain) */
+-#define WHACK		0
++#define PIERCE         0x1     /* for weapons & tools used as weapons */
++#define SLASH          0x2     /* (latter includes iron ball & chain) */
++#define WHACK          0x4
+ 
+ 	/*Bitfield(oc_subtyp,3);*/	/* Now too big for a bitfield... see below */
+ 
+Binary files nethack-3.4.3-original/src/.DS_Store and nethack-3.4.3/src/.DS_Store differ
+diff -Nurb nethack-3.4.3-original/src/mhitm.c nethack-3.4.3/src/mhitm.c
+--- nethack-3.4.3-original/src/mhitm.c	Mon Dec  8 09:39:13 2003
++++ nethack-3.4.3/src/mhitm.c	Wed Feb  1 22:22:45 2006
+@@ -405,7 +405,11 @@
+ 		    Strcpy(magr_name, Monnam(magr));
+ 		    switch (mattk->aatyp) {
+ 			case AT_BITE:
+-				Sprintf(buf,"%s bites", magr_name);
++                               Sprintf(buf,"%s %ss", magr_name, has_beak(magr->data) ?
++                                   "peck" : "bite");
++                               break;
++                       case AT_KICK:
++                               Sprintf(buf,"%s kicks", magr_name);
+ 				break;
+ 			case AT_STNG:
+ 				Sprintf(buf,"%s stings", magr_name);
+@@ -425,6 +429,20 @@
+ 				    Sprintf(buf,"%s squeezes", magr_name);
+ 				    break;
+ 				}
++                       case AT_WEAP:
++                               if (MON_WEP(magr)) {
++                                   if (is_launcher(MON_WEP(magr)) ||
++                                       is_missile(MON_WEP(magr)) ||
++                                       is_ammo(MON_WEP(magr)) ||
++                                       is_pole(MON_WEP(magr)))
++                                           Sprintf(buf,"%s hits", magr_name);
++                                   else Sprintf(buf,"%s %s", magr_name,
++                                       makeplural(weaphitmsg(MON_WEP(magr),FALSE)));
++                                   break;
++                               } /*fallthrough*/
++                       case AT_CLAW:
++                               Sprintf(buf,"%s %s", magr_name, makeplural(barehitmsg(magr)));
++                               break;
+ 			default:
+ 				Sprintf(buf,"%s hits", magr_name);
+ 		    }
+diff -Nurb nethack-3.4.3-original/src/mhitu.c nethack-3.4.3/src/mhitu.c
+--- nethack-3.4.3-original/src/mhitu.c	Wed Feb  1 00:30:02 2006
++++ nethack-3.4.3/src/mhitu.c	Wed Feb  1 22:22:45 2006
+@@ -36,6 +36,54 @@
+ 
+ #ifdef OVL1
+ 
++const char *
++weaphitmsg(obj,uhitm)
++struct obj *obj;
++boolean uhitm;
++{
++       /* lucern hammers and bec-de-corbins both whack and pierce */
++       return ((objects[obj->otyp].oc_dir & WHACK &&
++               (!(objects[obj->otyp].oc_dir & PIERCE) || rn2(2))) ?
++                       ((objects[obj->otyp].oc_skill == P_CLUB ||
++                       objects[obj->otyp].oc_skill == P_MACE ||
++                       objects[obj->otyp].oc_skill == P_MORNING_STAR) ?
++                           "club" : "whack") :
++               (objects[obj->otyp].oc_dir & PIERCE &&
++               (!(objects[obj->otyp].oc_dir & SLASH) || rn2(2))) ?
++                       (is_blade(obj) ? "stab" : "jab") :
++               (objects[obj->otyp].oc_dir & SLASH) ?
++                       (uhitm && Role_if(PM_BARBARIAN) ? "smite" :
++                        rn2(2) ? "hack" : is_axe(obj) ? "hew" : "slash") :
++               (objects[obj->otyp].oc_skill == P_WHIP) ?
++                       "whip" :
++               "hit");
++}
++
++const char *
++barehitmsg(mtmp)
++struct monst *mtmp;
++{
++       if (!strcmp(mbodypart(mtmp, HAND),"claw") ||
++	   !strcmp(mbodypart(mtmp, HAND),"paw") ||
++               !strcmp(mbodypart(mtmp, HAND),"foreclaw") || is_bird(mtmp->data))
++                return "claw";
++       if (!strcmp(mbodypart(mtmp, HAND),"swirl") || /* elementals */
++           !strcmp(mbodypart(mtmp, HAND),"tentacle")) { /* krakens */
++               if (mtmp->data == &mons[PM_EARTH_ELEMENTAL])
++                   return "pummel";
++               return "lash";
++       } if (is_undead(mtmp->data))
++               return "scratch";
++       if (mtmp->data == &mons[PM_MONK] || mtmp->data == &mons[PM_SAMURAI]
++               || (martial_bonus() &&
++                  (mtmp == &youmonst ||
++                   /* Assumes monk or samurai quest monsters */
++                  mtmp->data->msound == MS_LEADER ||
++                  mtmp->data->msound == MS_GUARDIAN ||
++                  mtmp->data->msound == MS_NEMESIS)))
++               return "strike";
++       return "punch";
++}
+ 
+ STATIC_OVL void
+ hitmsg(mtmp, mattk)
+@@ -43,6 +91,7 @@
+ register struct attack *mattk;
+ {
+ 	int compat;
++	char buf[BUFSZ];
+ 
+ 	/* Note: if opposite gender, "seductively" */
+ 	/* If same gender, "engagingly" for nymph, normal msg for others */
+@@ -54,7 +103,8 @@
+ 	} else
+ 	    switch (mattk->aatyp) {
+ 		case AT_BITE:
+-			pline("%s bites!", Monnam(mtmp));
++                       pline("%s %ss!", Monnam(mtmp), has_beak(mtmp->data) ?
++                               "peck" : "bite");
+ 			break;
+ 		case AT_KICK:
+ 			pline("%s kicks%c", Monnam(mtmp),
+@@ -77,6 +127,28 @@
+ 		case AT_BOOM:
+ 			pline("%s explodes!", Monnam(mtmp));
+ 			break;
++               case AT_WEAP:
++                       if (MON_WEP(mtmp)) {
++			   Sprintf(buf, weaphitmsg(MON_WEP(mtmp),FALSE));
++                           if (is_launcher(MON_WEP(mtmp)) ||
++                               is_missile(MON_WEP(mtmp)) ||
++                               is_ammo(MON_WEP(mtmp)) ||
++                               is_pole(MON_WEP(mtmp)))
++                                   Sprintf(buf,"hit");
++                           pline("%s %s%s!", Monnam(mtmp),
++                               makeplural(buf), !strcmp(buf,"whip") ||
++						!strcmp(buf,"hack") ||
++						!strcmp(buf,"hew") ||
++						!strcmp(buf,"jab") ? " you" : "");
++                           break;
++                       } /*fallthrough*/
++               case AT_CLAW:
++		       Sprintf(buf, barehitmsg(mtmp));
++                       pline("%s %s%s!", Monnam(mtmp), makeplural(buf),
++						!strcmp(buf,"scratch") ||
++						!strcmp(buf,"strike") ||
++						!strcmp(buf,"punch") ? "" : " you");
++                       break;
+ 		default:
+ 			pline("%s hits!", Monnam(mtmp));
+ 	    }
+@@ -1383,7 +1455,7 @@
+ #endif
+ 		   && !uarm && !uarmh && !uarms && !uarmg && !uarmc && !uarmf) {
+ 		    boolean goaway = FALSE;
+-		    pline("%s hits!  (I hope you don't mind.)", Monnam(mtmp));
++                   pline("%s %s you!  (I hope you don't mind.)", Monnam(mtmp), makeplural(barehitmsg(mtmp)));
+ 		    if (Upolyd) {
+ 			u.mh += rnd(7);
+ 			if (!rn2(7)) {
+diff -Nurb nethack-3.4.3-original/src/objects.c nethack-3.4.3/src/objects.c
+--- nethack-3.4.3-original/src/objects.c	Mon Dec  8 09:39:13 2003
++++ nethack-3.4.3/src/objects.c	Wed Feb  1 22:22:45 2006
+@@ -240,7 +240,7 @@
+ 	1, 0, 0, 12, 30,  3,  6,  3, 0, B,   P_CLUB, WOOD, HI_WOOD),
+ #ifdef KOPS
+ WEAPON("rubber hose", (char *)0,
+-	1, 0, 0,  0, 20,  3,  4,  3, 0, B,   P_WHIP, PLASTIC, CLR_BROWN),
++       1, 0, 0,  0, 20,  3,  4,  3, 0, 0,   P_WHIP, PLASTIC, CLR_BROWN),
+ #endif
+ WEAPON("quarterstaff", "staff",
+ 	0, 0, 1, 11, 40,  5,  6,  6, 0, B,   P_QUARTERSTAFF, WOOD, HI_WOOD),
+diff -Nurb nethack-3.4.3-original/src/polyself.c nethack-3.4.3/src/polyself.c
+--- nethack-3.4.3-original/src/polyself.c	Mon Dec  8 09:39:13 2003
++++ nethack-3.4.3/src/polyself.c	Wed Feb  1 22:22:45 2006
+@@ -1203,8 +1203,9 @@
+ 	    return "trunk";
+ 	if (mptr == &mons[PM_SHARK] && part == HAIR)
+ 	    return "skin";	/* sharks don't have scales */
+-	if (mptr == &mons[PM_JELLYFISH] && (part == ARM || part == FINGER ||
+-	    part == HAND || part == FOOT || part == TOE))
++       if ((mptr == &mons[PM_JELLYFISH] || mptr == &mons[PM_KRAKEN]) &&
++          (part == ARM || part == FINGER || part == HAND ||
++           part == FOOT || part == TOE || part == FINGERTIP))
+ 	    return "tentacle";
+ 	if (mptr == &mons[PM_FLOATING_EYE] && part == EYE)
+ 	    return "cornea";
+@@ -1212,8 +1213,10 @@
+ 		(part == ARM || part == FINGER || part == FINGERTIP ||
+ 		    part == HAND || part == HANDED))
+ 	    return humanoid_parts[part];
+-	if (mptr == &mons[PM_RAVEN])
++       if (is_bird(mptr))
+ 	    return bird_parts[part];
++       if (has_beak(mptr) && part == NOSE)
++           return "beak";
+ 	if (mptr->mlet == S_CENTAUR || mptr->mlet == S_UNICORN ||
+ 		(mptr == &mons[PM_ROTHE] && part != HAIR))
+ 	    return horse_parts[part];
+diff -Nurb nethack-3.4.3-original/src/uhitm.c nethack-3.4.3/src/uhitm.c
+--- nethack-3.4.3-original/src/uhitm.c	Mon Dec  8 09:39:13 2003
++++ nethack-3.4.3/src/uhitm.c	Wed Feb  1 22:22:45 2006
+@@ -523,6 +523,7 @@
+ 	boolean silvermsg = FALSE, silverobj = FALSE;
+ 	boolean valid_weapon_attack = FALSE;
+ 	boolean unarmed = !uwep && !uarm && !uarms;
++       boolean not_melee_weapon = FALSE;
+ #ifdef STEED
+ 	int jousting = 0;
+ #endif
+@@ -579,6 +580,7 @@
+ 		    /* or throw a missile without the proper bow... */
+ 		    (is_ammo(obj) && !ammo_and_launcher(obj, uwep))) {
+ 		    /* then do only 1-2 points of damage */
++                   not_melee_weapon = TRUE;
+ 		    if (mdat == &mons[PM_SHADE] && obj->otyp != SILVER_ARROW)
+ 			tmp = 0;
+ 		    else
+@@ -1011,7 +1013,8 @@
+ 	  (!destroyed || (thrown && m_shot.n > 1 && m_shot.o == obj->otyp))) {
+ 		if (thrown) hit(mshot_xname(obj), mon, exclam(tmp));
+ 		else if (!flags.verbose) You("hit it.");
+-		else You("%s %s%s", Role_if(PM_BARBARIAN) ? "smite" : "hit",
++               else You("%s %s%s", !obj ? barehitmsg(&youmonst) :
++                         not_melee_weapon ? "hit" : weaphitmsg(obj,TRUE),
+ 			 mon_nam(mon), canseemon(mon) ? exclam(tmp) : ".");
+ 	}
+ 
+@@ -2018,7 +2021,8 @@
+ 			    if (mattk->aatyp == AT_KICK)
+ 				    You("kick %s.", mon_nam(mon));
+ 			    else if (mattk->aatyp == AT_BITE)
+-				    You("bite %s.", mon_nam(mon));
++                                   You("%s %s.", has_beak(youmonst.data) ?
++                                       "peck" : "bite", mon_nam(mon));
+ 			    else if (mattk->aatyp == AT_STNG)
+ 				    You("sting %s.", mon_nam(mon));
+ 			    else if (mattk->aatyp == AT_BUTT)
+@@ -2027,6 +2031,9 @@
+ 				    You("touch %s.", mon_nam(mon));
+ 			    else if (mattk->aatyp == AT_TENT)
+ 				    Your("tentacles suck %s.", mon_nam(mon));
++                           else if (mattk->aatyp == AT_CLAW) {
++                                   You("%s %s.", barehitmsg(&youmonst),mon_nam(mon));
++                           }
+ 			    else You("hit %s.", mon_nam(mon));
+ 			    sum[i] = damageum(mon, mattk);
+ 			} else
