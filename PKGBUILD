@@ -21,14 +21,16 @@ source=("http://downloads.sourceforge.net/$pkgname/$pkgname-${pkgver//.}-src.tgz
         'nh343-acid-C343-179.diff'
         'nh343-astral-call-fix.v1.0.patch'
         'nh343-glyphcolor.diff'
-        'nh343-beartraps.diff')
+        'nh343-beartraps.diff'
+        'nh343-polysilver_v4.diff')
 md5sums=('21479c95990eefe7650df582426457f9'
          'ade00f9cb51f1b0140557d329d56844c'
          'b11eeacbf6e58496563723dcf1047ac1'
          'a067ae1d0c1d0a72a181539c6f5e26f1'
          'ba388b863c90e6df708f9ab69c4a9bfc'
          'eb0be431054498c894a8fd7227f4f142'
-         'a9b219d0c763c5cf92c9269f340e3493')
+         'a9b219d0c763c5cf92c9269f340e3493'
+         'bc0b1cbbc9b14870d1c3216ad6462ada')
 
 build(){
   cd $srcdir/$pkgname-$pkgver/
@@ -64,6 +66,8 @@ build(){
   patch -t -p1 <../nh343-acid-C343-179.diff
   patch -t -p1 <../nh343-astral-call-fix.v1.0.patch
   patch -t -p1 <../nh343-glyphcolor.diff
+  patch -t -p1 <../nh343-beartraps.diff
+  patch -t -p1 <../nh343-polysilver_v4.diff
 
   make
 }

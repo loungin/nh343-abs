@@ -1,0 +1,377 @@
+diff --exclude debian --exclude 'Makefile.src*' -ur orig/nethack-3.4.3/include/extern.h nethack-3.4.3/include/extern.h
+--- orig/nethack-3.4.3/include/extern.h	2003-12-24 21:41:50.000000000 -0800
++++ nethack-3.4.3/include/extern.h	2004-01-15 22:24:32.000000000 -0800
+@@ -1538,6 +1538,7 @@
+ E const char *FDECL(body_part, (int));
+ E int NDECL(poly_gender);
+ E void FDECL(ugolemeffects, (int,int));
++E void FDECL(silver_burn, (BOOLEAN_P));
+ 
+ /* ### potion.c ### */
+ 
+diff --exclude debian --exclude 'Makefile.src*' -ur orig/nethack-3.4.3/include/objclass.h nethack-3.4.3/include/objclass.h
+--- orig/nethack-3.4.3/include/objclass.h	2003-12-24 21:41:50.000000000 -0800
++++ nethack-3.4.3/include/objclass.h	2004-01-15 19:07:39.000000000 -0800
+@@ -63,6 +63,7 @@
+ #define GEMSTONE	20
+ #define MINERAL		21
+ 
++#define is_silver(otmp)		(objects[otmp->otyp].oc_material == SILVER)
+ #define is_organic(otmp)	(objects[otmp->otyp].oc_material <= WOOD)
+ #define is_metallic(otmp)	(objects[otmp->otyp].oc_material >= IRON && \
+ 				 objects[otmp->otyp].oc_material <= MITHRIL)
+diff --exclude debian --exclude 'Makefile.src*' -ur orig/nethack-3.4.3/src/dothrow.c nethack-3.4.3/src/dothrow.c
+--- orig/nethack-3.4.3/src/dothrow.c	2003-12-24 21:41:51.000000000 -0800
++++ nethack-3.4.3/src/dothrow.c	2004-01-15 19:31:52.000000000 -0800
+@@ -312,6 +312,17 @@
+ 		}
+ 	}
+ 
++	if (hates_silver(youmonst.data) && is_silver(uquiver) && !uarmg)
++	{
++	  char* tm = simple_typename(uquiver->otyp);
++	  You("reach into your quiver, but the %s%s%s inside burn%s you!",
++	      strstri(tm, "silver") ? "" : "silver ", tm,
++	      uquiver->quan > 1 ? "s" : "",
++	      uquiver->quan > 1 ? "" : "s");
++	  losehp(3, "silver burn", KILLED_BY_AN);
++	  return 1; /* it takes a turn to make a dumbass out of yourself */
++	}
++	
+ 	/*
+ 	 * Since some characters shoot multiple missiles at one time,
+ 	 * allow user to specify a count prefix for 'f' or 't' to limit
+diff --exclude debian --exclude 'Makefile.src*' -ur orig/nethack-3.4.3/src/do_wear.c nethack-3.4.3/src/do_wear.c
+--- orig/nethack-3.4.3/src/do_wear.c	2003-12-24 21:41:51.000000000 -0800
++++ nethack-3.4.3/src/do_wear.c	2004-01-15 19:07:39.000000000 -0800
+@@ -467,6 +467,13 @@
+ 	uswapwepgone();	/* lifesaved still doesn't allow touching cockatrice */
+     }
+ 
++    /* And if you hate silver, drop any silver weapons you're wielding,
++     * drop any silver rings you're wearing, drop any silver shields you're 
++     * wearing, because you're now unprotected */
++
++    if (hates_silver(youmonst.data))
++	silver_burn(TRUE);
++
+     return 0;
+ }
+ 
+@@ -1419,6 +1426,14 @@
+ 	if (otmp->oartifact && !touch_artifact(otmp, &youmonst))
+ 	    return 1;	/* costs a turn even though it didn't get worn */
+ 
++	if (hates_silver(youmonst.data) && is_silver(otmp) && !uarmg)
++	{
++	  You("burn your %s trying to wear that %s!",
++	      makeplural(body_part(HAND)), simple_typename(otmp->otyp));
++	  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++	  You("wisely give up trying to wear it.");
++	  return 1;
++	}
+ 	if (otmp->otyp == HELM_OF_OPPOSITE_ALIGNMENT &&
+ 			qstart_level.dnum == u.uz.dnum) {	/* in quest */
+ 		if (u.ualignbase[A_CURRENT] == u.ualignbase[A_ORIGINAL])
+@@ -1538,6 +1553,16 @@
+ 		}
+ 		if (otmp->oartifact && !touch_artifact(otmp, &youmonst))
+ 		    return 1; /* costs a turn even though it didn't get worn */
++		
++		/* glove check matters not */
++		if (hates_silver(youmonst.data) && is_silver(otmp))
++		{
++		  pline_The("ring singes your finger as you try to put it on!");
++		  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++		  You("give up trying to wear the ring.");
++		  return 1;
++		}
++		
+ 		setworn(otmp, mask);
+ 		Ring_on(otmp);
+ 	} else if (otmp->oclass == AMULET_CLASS) {
+diff --exclude debian --exclude 'Makefile.src*' -ur orig/nethack-3.4.3/src/pickup.c nethack-3.4.3/src/pickup.c
+--- orig/nethack-3.4.3/src/pickup.c	2003-12-24 21:41:52.000000000 -0800
++++ nethack-3.4.3/src/pickup.c	2004-01-15 19:07:39.000000000 -0800
+@@ -1344,6 +1344,14 @@
+ 	if ((res = lift_object(obj, (struct obj *)0, &count, telekinesis)) <= 0)
+ 	    return res;
+ 
++	if (hates_silver(youmonst.data) && is_silver(obj) && !telekinesis && !uarmg)
++	{
++	  pline("Ouch!  That %s is made of silver!", simple_typename(obj->otyp));
++	  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++	  You("lose your grip on the %s.", simple_typename(obj->otyp));
++	  return 0;
++	}
++	
+ #ifdef GOLDOBJ
+         /* Whats left of the special case for gold :-) */
+ 	if (obj->oclass == COIN_CLASS) flags.botl = 1;
+diff --exclude debian --exclude 'Makefile.src*' -ur orig/nethack-3.4.3/src/polyself.c nethack-3.4.3/src/polyself.c
+--- orig/nethack-3.4.3/src/polyself.c	2003-12-24 21:41:52.000000000 -0800
++++ nethack-3.4.3/src/polyself.c	2004-01-15 19:07:39.000000000 -0800
+@@ -567,6 +567,195 @@
+ 	return(1);
+ }
+ 
++void
++silver_burn(first)
++  boolean first;
++{
++  boolean removable_gloves;
++  unsigned int num_burns = 0; 
++  static char burns_away[] = "skin on your %s burns away!";
++  static char tear_off[] = "tear off the silver ring there and drop it!";
++  static char unremovable[] = "cannot remove your gloves to remove the burning ring!";
++  static char unremovable_ring[] = "But the silver ring on your %s won't come off!";
++
++  /* If you become silver fearing, drop any silver armor and silver weapons
++   * that you are wearing or wielding.
++   *
++   * However, if you're wearing gloves, you can pick up anything silver, wield
++   * anything silver, wear a silver shield, but silver rings will hurt you. */
++  
++  if (hates_silver(youmonst.data))
++  {
++    /* first deal with weapon #2 */
++    if (u.twoweap && uswapwep && is_silver(uswapwep) && !uarmg)
++    {
++      if (first)
++      {
++	You("feel a searing sting in your left %s!", body_part(HAND));
++	losehp(1, "silver burn", KILLED_BY_AN);
++	if (!Upolyd) return;
++
++	if (!uswapwep->cursed)
++	{
++	  untwoweapon();
++	  drop_uswapwep();
++	}
++	else
++	{
++	  char* tm = simple_typename(uswapwep->otyp);
++	  pline("But you can't drop the %s%s in it!",
++	      strstri(tm, "silver") ? "" : "silver ", tm);
++	  pline_The(burns_away, body_part(HAND));
++	  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++	  if (!Upolyd) return;
++	}
++      }
++      else
++	num_burns++;
++    }
++
++    if (uwep && is_silver(uwep) && !uarmg)
++    {
++      if (first)
++      {
++	You("%sfeel a searing sting in your right %s!",
++	    num_burns ? "also " : "", body_part(HAND));
++	losehp(1, "silver burn", KILLED_BY_AN);
++	
++	if (!Upolyd) return;
++
++	/* non-weapons may be dropped when wielded + cursed */
++	if (!uwep->cursed || uwep->oclass != WEAPON_CLASS)
++	{
++	  drop_weapon(1);
++
++	  if (uwep) /* was not a weapon or weptool? */
++	  {
++	    struct obj * thing = uwep;
++	    uwepgone();
++	    dropx(thing);
++	    pline_The("%s in your %s drops to the floor.",
++		simple_typename(thing->otyp), body_part(HAND));
++	  }
++	}
++	else
++	{
++	  char *tm = simple_typename(uwep->otyp);
++	  pline("But you can't drop the %s%s in it!",
++	      strstri(tm, "silver") ? "" : "silver ", tm);
++	  pline_The(burns_away, body_part(HAND));
++	  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++
++	  if (!Upolyd) return;
++	}
++      }
++      else /* no auto-remove after the first time */
++	num_burns++;
++    }
++
++    removable_gloves = (!uarmg || (uarmg && uarmg->cursed));
++
++    /* These are always on your hand, not on a glove */
++    if (uleft && is_silver(uleft))
++    {
++      if (first)
++      {
++	Your("left %s is on fire!", body_part(FINGER));
++	losehp(1, "silver burn", KILLED_BY_AN);
++
++	if (!Upolyd) return;
++	
++	if (!uleft->cursed && removable_gloves)
++	{
++	  struct obj* ring = uleft;
++	  You(tear_off);
++	  Ring_off(ring);
++	  dropx(ring);
++	}
++	else
++	{
++	  if (uarmg)
++	    You(unremovable);
++	  else
++	    pline(unremovable_ring, body_part(FINGER));
++
++	  pline_The(burns_away, body_part(FINGER));
++	  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++
++	  if (!Upolyd) return;
++	}
++      }
++      else
++	num_burns++;
++    }
++
++    if (uright && is_silver(uright))
++    {
++      if (first)
++      {
++	Your("right %s burns!", body_part(FINGER));
++	losehp(1, "silver burn", KILLED_BY_AN);
++	if (!Upolyd) return;
++	
++	if (!uright->cursed && removable_gloves)
++	{
++	  struct obj* ring = uright;
++	  You(tear_off);
++	  Ring_off(ring);
++	  dropx(ring);
++	}
++	else
++	{
++	  if (uarmg)
++	    You(unremovable);
++	  else
++	    pline(unremovable_ring, body_part(FINGER));
++
++	  pline_The(burns_away, body_part(FINGER));
++	  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++	  if (!Upolyd) return;
++	}
++      }
++      else
++	num_burns++;
++    }
++
++    /* silver shield */
++    if (uarms && is_silver(uarms) && !uarmg)
++    {
++      if (first)
++      {
++	Your("silver shield burns your %s!", body_part(HAND));
++	losehp(1, "silver burn", KILLED_BY_AN);
++	if (!Upolyd) return;
++	
++	if (!uarms->cursed)
++	{
++	  struct obj* shld = uarms;
++	  You("drop it!");
++	  Shield_off();
++	  dropx(shld);
++	}
++	else
++	{
++	  You("can't drop it! The skin on your %s burns away.", body_part(HAND));
++	  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++	  if (!Upolyd) return;
++	}
++      }
++      else
++	num_burns++;
++    }
++
++    if (!first && num_burns)
++    {
++      pline("Your body is scorched by the silver you are wearing!");
++      /* not as serious as the first burn */
++      losehp(rnd(6) * num_burns, "silver burn", KILLED_BY_AN);
++    }
++  }
++}
++
+ STATIC_OVL void
+ break_armor()
+ {
+@@ -671,6 +860,8 @@
+ 	    dropx(otmp);
+ 	}
+     }
++
++    silver_burn(TRUE); /* first time, say a lot about your burns */
+ }
+ 
+ STATIC_OVL void
+diff --exclude debian --exclude 'Makefile.src*' -ur orig/nethack-3.4.3/src/timeout.c nethack-3.4.3/src/timeout.c
+--- orig/nethack-3.4.3/src/timeout.c	2003-12-24 21:41:53.000000000 -0800
++++ nethack-3.4.3/src/timeout.c	2004-01-15 19:07:39.000000000 -0800
+@@ -183,6 +183,7 @@
+ 		u.uluck++;
+ 	}
+ 	if(u.uinvulnerable) return; /* things past this point could kill you */
++	silver_burn(FALSE); /* will not hurt non-silver-fearing people */
+ 	if(Stoned) stoned_dialogue();
+ 	if(Slimed) slime_dialogue();
+ 	if(Vomiting) vomiting_dialogue();
+diff --exclude debian --exclude 'Makefile.src*' -ur orig/nethack-3.4.3/src/wield.c nethack-3.4.3/src/wield.c
+--- orig/nethack-3.4.3/src/wield.c	2003-12-24 21:41:53.000000000 -0800
++++ nethack-3.4.3/src/wield.c	2004-01-15 19:35:34.000000000 -0800
+@@ -255,6 +255,12 @@
+ 		/* previously interrupted armor removal mustn't be resumed */
+ 		reset_remarm();
+ 		return (0);
++	} else if (hates_silver(youmonst.data) && is_silver(wep) && !uarmg) {
++	  	pline_The("%s stings your %s!", simple_typename(wep->otyp),
++		    body_part(HAND));
++		losehp(rnd(12), "silver burn", KILLED_BY_AN);
++		You("give up trying to wield the %s.", simple_typename(wep->otyp));
++		return(0);
+ 	}
+ 
+ 	/* Handle no object, or object in other slot */
+@@ -374,6 +380,16 @@
+ 			)) {
+ 		You("cannot ready that!");
+ 		return (0);
++	} else if (hates_silver(youmonst.data) && is_silver(newquiver) && !uarmg) {
++	  char* tm = simple_typename(newquiver->otyp);
++	  pline("Ouch!  Th%s %s%s%s feel%s red hot!",
++	      newquiver->quan > 1 ? "ese" : "is",
++	      strstri(tm, "silver") ? "" : "silver ", tm,
++	      newquiver->quan > 1 ? "s" : "",
++	      newquiver->quan > 1 ? "" : "s");
++	  Your("hand gets a little singed.");
++	  losehp(4, "silver burn", KILLED_BY_AN);
++	  return (0);
+ 	} else {
+ 		long dummy;
+ 
+@@ -535,6 +551,14 @@
+ 
+ 	/* May we use two weapons? */
+ 	if (can_twoweapon()) {
++	  	if (hates_silver(youmonst.data) && is_silver(uswapwep) && !uarmg)
++		{
++		  char *tm = simple_typename(uswapwep->otyp);
++		  Your("%s%s burns you as you try to wield it!",
++		      strstri(tm, "silver") ? "" : "silver ", tm);
++		  losehp(rnd(12), "silver burn", KILLED_BY_AN);
++		  return 0;
++		}
+ 		/* Success! */
+ 		You("begin two-weapon combat.");
+ 		u.twoweap = 1;
